@@ -20,6 +20,9 @@ func ScanRow(connection *pgx.Conn, destination any, table string, extra ...any) 
 		Node{
 			Token: SELECT,
 		},
+		Node{
+			Token: SPACE,
+		},
 	}
 
 	fields := element.NumField()
@@ -38,23 +41,40 @@ func ScanRow(connection *pgx.Conn, destination any, table string, extra ...any) 
 			name = tag
 		}
 
-		name = "\"" + name + "\""
-
-		statement = append(statement, Node{
-			Token:   IDENTIFIER,
-			Literal: name,
-		})
+		statement = append(statement, []Node{
+			Node{
+				Token: QUOTE,
+			},
+			Node{
+				Token:   IDENTIFIER,
+				Literal: name,
+			},
+			Node{
+				Token: QUOTE,
+			},
+		}...)
 
 		if index+1 != fields {
-			statement = append(statement, Node{
-				Token: COMMA,
-			})
+			statement = append(statement, []Node{
+				Node{
+					Token: COMMA,
+				},
+				Node{
+					Token: SPACE,
+				},
+			}...)
 		}
 	}
 
 	statement = append(statement, []Node{
 		Node{
+			Token: SPACE,
+		},
+		Node{
 			Token: FROM,
+		},
+		Node{
+			Token: SPACE,
 		},
 		Node{
 			Token:   IDENTIFIER,

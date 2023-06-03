@@ -13,9 +13,11 @@ const (
 	FROM
 	literal_end
 
-	operator_begin
+	symbol_begin
 	COMMA
-	operator_end
+	SPACE
+	QUOTE
+	symbol_end
 )
 
 var tokens = [...]string{
@@ -28,6 +30,8 @@ var tokens = [...]string{
 	FROM:   "FROM",
 
 	COMMA: ",",
+	SPACE: " ",
+	QUOTE: "\"",
 }
 
 func (token Token) String() string {

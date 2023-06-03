@@ -12,15 +12,11 @@ type Node struct {
 func Compile(statement []Node) string {
 	buffer := new(bytes.Buffer)
 
-	for index, node := range statement {
+	for _, node := range statement {
 		if node.Literal == "" {
 			buffer.WriteString(node.Token.String())
 		} else {
 			buffer.WriteString(node.Literal)
-		}
-
-		if index+1 != len(statement) {
-			buffer.WriteByte(' ')
 		}
 	}
 
