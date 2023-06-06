@@ -12,10 +12,7 @@ type Brand struct {
 	Domain string `orm:"domain"`
 }
 
-func ScanRow(connection *pgx.Conn, destination any, table string, extra ...any) error {
-	element := reflect.TypeOf(destination).Elem()
-	value := reflect.ValueOf(destination).Elem()
-
+func assemble(element reflect.Type, table string, arguments []any) (string, []any) {
 	statement := []Node{
 		Node{
 			Token: SELECT,
@@ -27,11 +24,7 @@ func ScanRow(connection *pgx.Conn, destination any, table string, extra ...any) 
 
 	fields := element.NumField()
 
-	var arguments []any
-
 	for index := 0; index < fields; index++ {
-		arguments = append(arguments, value.Field(index).Addr().Interface())
-
 		field := element.Field(index)
 
 		name := field.Name
@@ -84,10 +77,64 @@ func ScanRow(connection *pgx.Conn, destination any, table string, extra ...any) 
 
 	compiled := Compile(statement)
 
-	if len(extra) > 0 {
-		compiled += " " + extra[0].(string)
-		extra = extra[1:]
+	if len(arguments) > 0 {
+		raw, isString := arguments[0].(string)
+
+		if isString == true {
+			compiled += " " + raw
+			arguments = arguments[1:]
+		}
 	}
 
-	return connection.QueryRow(context.TODO(), compiled, extra...).Scan(arguments...)
+	return compiled, arguments
+}
+
+func Scan(connection *pgx.Conn, destination any, table string, arguments ...any) error {
+	element := reflect.TypeOf(destination).Elem().Elem()
+	value := reflect.ValueOf(destination).Elem()
+
+	statement, arguments := assemble(element, table, arguments)
+
+	rows, err := connection.Query(context.TODO(), statement, arguments...)
+
+	if err != nil {
+		return nil
+	}
+
+	defer rows.Close()
+
+	for rows.Next() {
+		cursor := reflect.New(element).Elem()
+
+		var parameters []any
+
+		for index := 0; index < element.NumField(); index++ {
+			parameters = append(parameters, cursor.Field(index).Addr().Interface())
+		}
+
+		err = rows.Scan(parameters...)
+
+		if err != nil {
+			return err
+		}
+
+		value.Set(reflect.Append(value, cursor))
+	}
+
+	return nil
+}
+
+func ScanRow(connection *pgx.Conn, destination any, table string, arguments ...any) error {
+	element := reflect.TypeOf(destination).Elem()
+	value := reflect.ValueOf(destination).Elem()
+
+	statement, arguments := assemble(element, table, arguments)
+
+	var parameters []any
+
+	for index := 0; index < element.NumField(); index++ {
+		parameters = append(parameters, value.Field(index).Addr().Interface())
+	}
+
+	return connection.QueryRow(context.TODO(), statement, arguments...).Scan(parameters...)
 }

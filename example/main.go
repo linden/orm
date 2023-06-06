@@ -34,4 +34,14 @@ func main() {
 	}
 
 	fmt.Printf("person: %+v\n", person)
+
+	var people []Person
+
+	err = orm.Scan(connection, &people, "people")
+
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Printf("people: %+v\n", people)
 }
