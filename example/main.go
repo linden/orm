@@ -36,7 +36,7 @@ func main() {
 
 	var person Person
 
-	err = orm.ScanRow(connection, &person, "people", "WHERE age = $1", 24)
+	err = orm.ScanRow(context.TODO(), connection, &person, "people", "WHERE age = $1", 24)
 
 	if err != nil {
 		panic(err)
@@ -46,7 +46,7 @@ func main() {
 
 	var people []Person
 
-	err = orm.Scan(connection, &people, "people")
+	err = orm.Scan(context.TODO(), connection, &people, "people")
 
 	if err != nil {
 		panic(err)
@@ -56,7 +56,7 @@ func main() {
 
 	var friend Friend
 
-	err = orm.ScanRow(connection, &friend, "friends")
+	err = orm.ScanRow(context.TODO(), connection, &friend, "friends")
 
 	if err != nil {
 		panic(err)

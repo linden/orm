@@ -314,7 +314,7 @@ func assemble(element reflect.Type, table string, arguments []any) (string, []an
 	return compiled, arguments, nil
 }
 
-func Scan(connection *pgx.Conn, destination any, table string, arguments ...any) error {
+func Scan(session context.Context, connection *pgx.Conn, destination any, table string, arguments ...any) error {
 	pointer := reflect.TypeOf(destination).Kind()
 
 	if pointer != reflect.Pointer {
@@ -341,7 +341,7 @@ func Scan(connection *pgx.Conn, destination any, table string, arguments ...any)
 		return err
 	}
 
-	rows, err := connection.Query(context.TODO(), statement, arguments...)
+	rows, err := connection.Query(session, statement, arguments...)
 
 	if err != nil {
 		return err
@@ -370,7 +370,7 @@ func Scan(connection *pgx.Conn, destination any, table string, arguments ...any)
 	return nil
 }
 
-func ScanRow(connection *pgx.Conn, destination any, table string, arguments ...any) error {
+func ScanRow(session context.Context, connection *pgx.Conn, destination any, table string, arguments ...any) error {
 	kind := reflect.TypeOf(destination).Kind()
 
 	if kind != reflect.Pointer {
@@ -396,5 +396,5 @@ func ScanRow(connection *pgx.Conn, destination any, table string, arguments ...a
 		return err
 	}
 
-	return connection.QueryRow(context.TODO(), statement, arguments...).Scan(parameters...)
+	return connection.QueryRow(session, statement, arguments...).Scan(parameters...)
 }
