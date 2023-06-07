@@ -20,6 +20,14 @@ type Foreign struct {
 	Right string
 }
 
+type RowQuerier interface {
+	QueryRow(context.Context, string, ...any) pgx.Row
+}
+
+type Querier interface {
+	Query(context.Context, string, ...any) (pgx.Rows, error)
+}
+
 type Selection struct {
 	Name    string
 	Foreign Foreign
@@ -314,7 +322,7 @@ func assemble(element reflect.Type, table string, arguments []any) (string, []an
 	return compiled, arguments, nil
 }
 
-func Scan(session context.Context, connection *pgx.Conn, destination any, table string, arguments ...any) error {
+func Scan(session context.Context, querier Querier, destination any, table string, arguments ...any) error {
 	pointer := reflect.TypeOf(destination).Kind()
 
 	if pointer != reflect.Pointer {
@@ -341,7 +349,7 @@ func Scan(session context.Context, connection *pgx.Conn, destination any, table 
 		return err
 	}
 
-	rows, err := connection.Query(session, statement, arguments...)
+	rows, err := querier.Query(session, statement, arguments...)
 
 	if err != nil {
 		return err
@@ -370,7 +378,7 @@ func Scan(session context.Context, connection *pgx.Conn, destination any, table 
 	return nil
 }
 
-func ScanRow(session context.Context, connection *pgx.Conn, destination any, table string, arguments ...any) error {
+func ScanRow(session context.Context, querier RowQuerier, destination any, table string, arguments ...any) error {
 	kind := reflect.TypeOf(destination).Kind()
 
 	if kind != reflect.Pointer {
@@ -396,5 +404,5 @@ func ScanRow(session context.Context, connection *pgx.Conn, destination any, tab
 		return err
 	}
 
-	return connection.QueryRow(session, statement, arguments...).Scan(parameters...)
+	return querier.QueryRow(session, statement, arguments...).Scan(parameters...)
 }
