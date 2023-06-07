@@ -9,14 +9,18 @@ const (
 	literal_begin
 	IDENTIFIER
 
+	INNER_JOIN
 	SELECT
 	FROM
+	ON
 	literal_end
 
 	symbol_begin
 	COMMA
 	SPACE
 	QUOTE
+	EQUAL
+	PERIOD
 	symbol_end
 )
 
@@ -26,12 +30,16 @@ var tokens = [...]string{
 
 	IDENTIFIER: "IDENTIFIER",
 
-	SELECT: "SELECT",
-	FROM:   "FROM",
+	INNER_JOIN: "INNER JOIN",
+	SELECT:     "SELECT",
+	FROM:       "FROM",
+	ON:         "ON",
 
-	COMMA: ",",
-	SPACE: " ",
-	QUOTE: "\"",
+	COMMA:  ",",
+	SPACE:  " ",
+	QUOTE:  "\"",
+	EQUAL:  "=",
+	PERIOD: ".",
 }
 
 func (token Token) String() string {
