@@ -184,23 +184,31 @@ func assembleForeignJoins(table string, foreign Foreign) []Node {
 	}
 }
 
-func assembleParameters(element reflect.Type, value reflect.Value) []any {
+func assembleParameters(element reflect.Type, value reflect.Value) ([]any, error) {
 	var parameters []any
 
 	for index := 0; index < element.NumField(); index++ {
-		field := value.Field(index)
-		foreign := element.Field(index).Tag.Get("orm_foreign")
+		valueField := value.Field(index)
+		elementField := element.Field(index)
+
+		foreign := elementField.Tag.Get("orm_foreign")
 
 		if foreign != "" {
-			for nested := 0; nested < field.NumField(); nested++ {
-				parameters = append(parameters, field.Field(nested).Addr().Interface())
+			kind := elementField.Type.Kind()
+
+			if kind != reflect.Struct {
+				return []any{}, fmt.Errorf("foreign fields must be structs: field %s is a %s", elementField.Name, kind)
+			}
+
+			for nested := 0; nested < valueField.NumField(); nested++ {
+				parameters = append(parameters, valueField.Field(nested).Addr().Interface())
 			}
 		} else {
-			parameters = append(parameters, field.Addr().Interface())
+			parameters = append(parameters, valueField.Addr().Interface())
 		}
 	}
 
-	return parameters
+	return parameters, nil
 }
 
 func assemble(element reflect.Type, table string, arguments []any) (string, []any, error) {
@@ -307,7 +315,24 @@ func assemble(element reflect.Type, table string, arguments []any) (string, []an
 }
 
 func Scan(connection *pgx.Conn, destination any, table string, arguments ...any) error {
+	pointer := reflect.TypeOf(destination).Kind()
+
+	if pointer != reflect.Pointer {
+		return fmt.Errorf("destination must be a pointer to an array of structs: got a %s", pointer)
+	}
+
+	array := reflect.TypeOf(destination).Elem().Kind()
+
+	if array != reflect.Slice {
+		return fmt.Errorf("destination must be a pointer to an array of structs: got a pointer to a %s", array)
+	}
+
 	element := reflect.TypeOf(destination).Elem().Elem()
+
+	if element.Kind() != reflect.Struct {
+		return fmt.Errorf("destination must be a pointer to an array of structs: got a pointer to an array of %ss", element.Kind())
+	}
+
 	value := reflect.ValueOf(destination).Elem()
 
 	statement, arguments, err := assemble(element, table, arguments)
@@ -327,7 +352,13 @@ func Scan(connection *pgx.Conn, destination any, table string, arguments ...any)
 	for rows.Next() {
 		cursor := reflect.New(element).Elem()
 
-		err = rows.Scan(assembleParameters(element, cursor)...)
+		parameters, err := assembleParameters(element, cursor)
+
+		if err != nil {
+			return err
+		}
+
+		err = rows.Scan(parameters...)
 
 		if err != nil {
 			return err
@@ -340,8 +371,18 @@ func Scan(connection *pgx.Conn, destination any, table string, arguments ...any)
 }
 
 func ScanRow(connection *pgx.Conn, destination any, table string, arguments ...any) error {
+	kind := reflect.TypeOf(destination).Kind()
+
+	if kind != reflect.Pointer {
+		return fmt.Errorf("destination must be a pointer to a struct: got kind %s", kind)
+	}
+
 	element := reflect.TypeOf(destination).Elem()
 	value := reflect.ValueOf(destination).Elem()
+
+	if element.Kind() != reflect.Struct {
+		return fmt.Errorf("destination must be a pointer to a struct: got a pointer to kind %s", element.Kind())
+	}
 
 	statement, arguments, err := assemble(element, table, arguments)
 
@@ -349,5 +390,11 @@ func ScanRow(connection *pgx.Conn, destination any, table string, arguments ...a
 		return err
 	}
 
-	return connection.QueryRow(context.TODO(), statement, arguments...).Scan(assembleParameters(element, value)...)
+	parameters, err := assembleParameters(element, value)
+
+	if err != nil {
+		return err
+	}
+
+	return connection.QueryRow(context.TODO(), statement, arguments...).Scan(parameters...)
 }
