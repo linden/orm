@@ -30,6 +30,7 @@ type Querier interface {
 
 type Selection struct {
 	Name    string
+	Omitted bool
 	Foreign Foreign
 }
 
@@ -45,8 +46,15 @@ func newSelection(raw reflect.StructField) (Selection, error) {
 			name = tag
 		}
 
+		omitted := false
+
+		if name == "-" {
+			omitted = true
+		}
+
 		return Selection{
-			Name: name,
+			Name:    name,
+			Omitted: omitted,
 		}, nil
 	}
 
@@ -80,11 +88,25 @@ func newSelection(raw reflect.StructField) (Selection, error) {
 	}, nil
 }
 
-func assembleForeignStatement(foreign Foreign) []Node {
-	var statement []Node
+func join(elements [][]Node, separator []Node) []Node {
+	var joined []Node
 
-	for index, field := range foreign.Fields {
-		statement = append(statement, []Node{
+	for index, element := range elements {
+		joined = append(joined, element...)
+
+		if index+1 != len(elements) {
+			joined = append(joined, separator...)
+		}
+	}
+
+	return joined
+}
+
+func assembleForeignStatement(foreign Foreign) []Node {
+	var tree [][]Node
+
+	for _, field := range foreign.Fields {
+		tree = append(tree, []Node{
 			Node{
 				Token: QUOTE,
 			},
@@ -108,21 +130,17 @@ func assembleForeignStatement(foreign Foreign) []Node {
 			Node{
 				Token: QUOTE,
 			},
-		}...)
-
-		if index+1 != len(foreign.Fields) {
-			statement = append(statement, []Node{
-				Node{
-					Token: COMMA,
-				},
-				Node{
-					Token: SPACE,
-				},
-			}...)
-		}
+		})
 	}
 
-	return statement
+	return join(tree, []Node{
+		Node{
+			Token: COMMA,
+		},
+		Node{
+			Token: SPACE,
+		},
+	})
 }
 
 func assembleForeignJoins(table string, foreign Foreign) []Node {
@@ -192,10 +210,14 @@ func assembleForeignJoins(table string, foreign Foreign) []Node {
 	}
 }
 
-func assembleParameters(element reflect.Type, value reflect.Value) ([]any, error) {
+func assembleParameters(selections []Selection, element reflect.Type, value reflect.Value) ([]any, error) {
 	var parameters []any
 
 	for index := 0; index < element.NumField(); index++ {
+		if selections[index].Omitted == true {
+			continue
+		}
+
 		valueField := value.Field(index)
 		elementField := element.Field(index)
 
@@ -245,7 +267,7 @@ func escapeTableName(raw string) []Node {
 	return statement
 }
 
-func assemble(element reflect.Type, table string, arguments []any) (string, []any, error) {
+func assemble(element reflect.Type, table string, arguments []any) (string, []any, []Selection, error) {
 	statement := []Node{
 		Node{
 			Token: SELECT,
@@ -255,25 +277,30 @@ func assemble(element reflect.Type, table string, arguments []any) (string, []an
 		},
 	}
 
-	fields := element.NumField()
-
 	var selections []Selection
 	var joins []Node
+	var tree [][]Node
 
-	for index := 0; index < fields; index++ {
+	for index := 0; index < element.NumField(); index++ {
 		field := element.Field(index)
 		selection, err := newSelection(field)
 
 		if err != nil {
-			return "", []any{}, err
+			return "", []any{}, []Selection{}, err
 		}
 
 		selections = append(selections, selection)
 
-		if selection.Name != "" {
-			statement = append(statement, escapeTableName(table)...)
+		if selection.Omitted == true {
+			continue
+		}
 
-			statement = append(statement, []Node{
+		var branch []Node
+
+		if selection.Name != "" {
+			branch = append(branch, escapeTableName(table)...)
+
+			branch = append(branch, []Node{
 				Node{
 					Token: QUOTE,
 				},
@@ -286,21 +313,21 @@ func assemble(element reflect.Type, table string, arguments []any) (string, []an
 				},
 			}...)
 		} else {
-			statement = append(statement, assembleForeignStatement(selection.Foreign)...)
+			branch = append(branch, assembleForeignStatement(selection.Foreign)...)
 			joins = append(joins, assembleForeignJoins(table, selection.Foreign)...)
 		}
 
-		if index+1 != fields {
-			statement = append(statement, []Node{
-				Node{
-					Token: COMMA,
-				},
-				Node{
-					Token: SPACE,
-				},
-			}...)
-		}
+		tree = append(tree, branch)
 	}
+
+	statement = append(statement, join(tree, []Node{
+		Node{
+			Token: COMMA,
+		},
+		Node{
+			Token: SPACE,
+		},
+	})...)
 
 	statement = append(statement, []Node{
 		Node{
@@ -329,12 +356,12 @@ func assemble(element reflect.Type, table string, arguments []any) (string, []an
 		raw, isString := arguments[0].(string)
 
 		if isString == true {
-			compiled += " " + raw
+			compiled += raw
 			arguments = arguments[1:]
 		}
 	}
 
-	return compiled, arguments, nil
+	return compiled, arguments, selections, nil
 }
 
 func Scan(session context.Context, querier Querier, destination any, table string, arguments ...any) error {
@@ -358,7 +385,7 @@ func Scan(session context.Context, querier Querier, destination any, table strin
 
 	value := reflect.ValueOf(destination).Elem()
 
-	statement, arguments, err := assemble(element, table, arguments)
+	statement, arguments, selections, err := assemble(element, table, arguments)
 
 	if err != nil {
 		return err
@@ -375,7 +402,7 @@ func Scan(session context.Context, querier Querier, destination any, table strin
 	for rows.Next() {
 		cursor := reflect.New(element).Elem()
 
-		parameters, err := assembleParameters(element, cursor)
+		parameters, err := assembleParameters(selections, element, cursor)
 
 		if err != nil {
 			return err
@@ -407,13 +434,13 @@ func ScanRow(session context.Context, querier RowQuerier, destination any, table
 		return fmt.Errorf("destination must be a pointer to a struct: got a pointer to kind %s", element.Kind())
 	}
 
-	statement, arguments, err := assemble(element, table, arguments)
+	statement, arguments, selections, err := assemble(element, table, arguments)
 
 	if err != nil {
 		return err
 	}
 
-	parameters, err := assembleParameters(element, value)
+	parameters, err := assembleParameters(selections, element, value)
 
 	if err != nil {
 		return err
