@@ -219,6 +219,32 @@ func assembleParameters(element reflect.Type, value reflect.Value) ([]any, error
 	return parameters, nil
 }
 
+func escapeTableName(raw string) []Node {
+	split := strings.Split(raw, ".")
+
+	var statement []Node
+
+	for _, cursor := range split {
+		statement = append(statement, []Node{
+			Node{
+				Token: QUOTE,
+			},
+			Node{
+				Token:   IDENTIFIER,
+				Literal: cursor,
+			},
+			Node{
+				Token: QUOTE,
+			},
+			Node{
+				Token: PERIOD,
+			},
+		}...)
+	}
+
+	return statement
+}
+
 func assemble(element reflect.Type, table string, arguments []any) (string, []any, error) {
 	statement := []Node{
 		Node{
@@ -245,20 +271,9 @@ func assemble(element reflect.Type, table string, arguments []any) (string, []an
 		selections = append(selections, selection)
 
 		if selection.Name != "" {
+			statement = append(statement, escapeTableName(table)...)
+
 			statement = append(statement, []Node{
-				Node{
-					Token: QUOTE,
-				},
-				Node{
-					Token:   IDENTIFIER,
-					Literal: table,
-				},
-				Node{
-					Token: QUOTE,
-				},
-				Node{
-					Token: PERIOD,
-				},
 				Node{
 					Token: QUOTE,
 				},
