@@ -143,10 +143,25 @@ func assembleForeignStatement(foreign Foreign) []Node {
 	})
 }
 
+func String(value string) []Node {
+	return []Node{
+		Node{
+			Token: QUOTE,
+		},
+		Node{
+			Token:   IDENTIFIER,
+			Literal: value,
+		},
+		Node{
+			Token: QUOTE,
+		},
+	}
+}
+
 func assembleForeignJoins(table string, foreign Foreign) []Node {
 	alias := foreign.Right + "_reference"
 
-	return []Node{
+	value := []Node{
 		Node{
 			Token: INNER_JOIN,
 		},
@@ -160,10 +175,11 @@ func assembleForeignJoins(table string, foreign Foreign) []Node {
 		Node{
 			Token: SPACE,
 		},
-		Node{
-			Token:   IDENTIFIER,
-			Literal: alias,
-		},
+	}
+
+	value = append(value, String(alias)...)
+
+	value = append(value, []Node{
 		Node{
 			Token: SPACE,
 		},
@@ -173,17 +189,17 @@ func assembleForeignJoins(table string, foreign Foreign) []Node {
 		Node{
 			Token: SPACE,
 		},
-		Node{
-			Token:   IDENTIFIER,
-			Literal: alias,
-		},
-		Node{
-			Token: PERIOD,
-		},
-		Node{
-			Token:   IDENTIFIER,
-			Literal: foreign.Left,
-		},
+	}...)
+
+	value = append(value, String(alias)...)
+
+	value = append(value, Node{
+		Token: PERIOD,
+	})
+
+	value = append(value, String(foreign.Left)...)
+
+	value = append(value, []Node{
 		Node{
 			Token: SPACE,
 		},
@@ -200,14 +216,15 @@ func assembleForeignJoins(table string, foreign Foreign) []Node {
 		Node{
 			Token: PERIOD,
 		},
-		Node{
-			Token:   IDENTIFIER,
-			Literal: foreign.Right,
-		},
-		Node{
-			Token: SPACE,
-		},
-	}
+	}...)
+
+	value = append(value, String(foreign.Right)...)
+
+	value = append(value, Node{
+		Token: SPACE,
+	})
+
+	return value
 }
 
 func assembleParameters(selections []Selection, element reflect.Type, value reflect.Value) ([]any, error) {
